@@ -21,6 +21,7 @@ router.get("/webhook", (req, res) => {
   const token     = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
+
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
     console.log("Webhook verified");
     return res.status(200).send(challenge);
@@ -32,6 +33,8 @@ router.get("/webhook", (req, res) => {
 //  WhatsApp Webhook — Incoming Messages
 // ════════════════════════════════════════════════════════════
 router.post("/webhook", async (req, res) => {
+   console.log("========== NEW WEBHOOK ==========");
+  console.log(JSON.stringify(req.body, null, 2));
   res.sendStatus(200);
   try {
     const message = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
