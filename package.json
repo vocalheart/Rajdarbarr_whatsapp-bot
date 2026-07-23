@@ -1,14 +1,22 @@
 {
   "name": "whatsapp-food-ordering",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Rajdarbar WhatsApp Food Ordering Bot",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon server.js",
+    "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "whatsapp",
+    "whatsapp-cloud-api",
+    "food-ordering",
+    "express",
+    "mongodb",
+    "razorpay"
+  ],
+  "author": "Rituraj Rai",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "axios": "^1.18.0",
     "body-parser": "^2.3.0",
@@ -18,5 +26,11 @@
     "mongodb": "^7.3.0",
     "mongoose": "^9.7.1",
     "razorpay": "^2.9.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

@@ -4,6 +4,10 @@ const { getWhatsAppList } = require("./WhatsAppList");
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const ACCESS_TOKEN    = process.env.ACCESS_TOKEN;
 
+console.log("PHONE_NUMBER_ID:", process.env.PHONE_NUMBER_ID);
+console.log("TOKEN EXISTS:", !!process.env.ACCESS_TOKEN);
+console.log("TOKEN START:", process.env.ACCESS_TOKEN?.substring(0, 20));
+
 const api = axios.create({
   baseURL: `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}`,
   headers: {

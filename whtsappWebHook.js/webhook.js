@@ -14,6 +14,7 @@ const {
 // ════════════════════════════════════════════════════════════
 //  WhatsApp Webhook Verification
 // ════════════════════════════════════════════════════════════
+
 router.get("/webhook", (req, res) => {
   const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "rajdarbar_webhook_123";
   const mode      = req.query["hub.mode"];
@@ -21,7 +22,7 @@ router.get("/webhook", (req, res) => {
   const challenge = req.query["hub.challenge"];
 
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("✅ Webhook verified");
+    console.log("Webhook verified");
     return res.status(200).send(challenge);
   }
   return res.sendStatus(403);
@@ -32,23 +33,18 @@ router.get("/webhook", (req, res) => {
 // ════════════════════════════════════════════════════════════
 router.post("/webhook", async (req, res) => {
   res.sendStatus(200);
-
   try {
     const message = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     if (!message) return;
-
     const from    = message.from;
     const msgType = message.type;
     console.log(`\n📩 From: ${from} | Type: ${msgType}`);
-
     const session = await getSession(from);
     console.log(`📌 State: ${session.state}`);
-
     // ── TEXT ─────────────────────────────────────────────────────────────────
     if (msgType === "text") {
       const rawText = message.text?.body?.trim();
       const text    = rawText?.toLowerCase();
-
       // Greetings → Welcome + Menu
       if (["hi","hii","hello","helo","hey","namaste"].includes(text)) {
         await resetSession(from);
@@ -63,7 +59,6 @@ router.post("/webhook", async (req, res) => {
         await sendText(from, '⏳ Aapka payment link abhi bhi active hai. Please pehle payment karein.\n\nNaya order karne ke liye *"Hi"* type karein.');
         return;
       }
-
       // Quantity
       if (session.state === "awaiting_quantity") {
         const qty = parseInt(text);
@@ -79,7 +74,7 @@ router.post("/webhook", async (req, res) => {
       // Address text
       if (session.state === "awaiting_address_text") {
         if (rawText.length < 10) {
-          await sendText(from, "⚠️ Address thoda detail mein likhein (gali, mohalla, sheher):");
+          await sendText(from, "⚠️Address thoda detail mein likhein (gali, mohalla, sheher):");
           return;
         }
         await updateSession(from, { address: rawText, state: "awaiting_mobile" });
@@ -93,14 +88,13 @@ router.post("/webhook", async (req, res) => {
         if (!/^[6-9]\d{9}$/.test(mobile)) {
           await sendText(from, "⚠️ Valid 10-digit mobile number daalen (jaise: 9876543210):");
           return;
-        }
+        };
         await updateSession(from, { mobile, state: "awaiting_payment" });
         await initiatePayment(from, { ...session.toObject(), mobile }, session.quantity, session.address, session.location);
         return;
       }
-
       // Default
-      await sendText(from, '👋 *Rajdarbar Restaurant*\n\nOrder karne ke liye *"Hi"* type karein.');
+      await sendText(from, '👋 *Rajdarbar Restaurant*\n\n\ Order karne ke liye *"Hi"* type karein.');
     }
 
     // ── INTERACTIVE (List / Button) ───────────────────────────────────────────
@@ -125,12 +119,11 @@ router.post("/webhook", async (req, res) => {
       // Address choice buttons
       if (iType === "button_reply") {
         const btnId = message.interactive.button_reply?.id;
-
         if (btnId === "address_text") {
           await updateSession(from, { state: "awaiting_address_text" });
           await sendAskAddressText(from);
           return;
-        }
+        };
         if (btnId === "address_location") {
           await updateSession(from, { state: "awaiting_location" });
           await sendAskLocation(from);
@@ -155,12 +148,10 @@ router.post("/webhook", async (req, res) => {
       }
       await sendText(from, '📍 Yeh location is waqt kaam nahi aayega.\n\nOrder ke liye *"Hi"* type karein.');
     }
-
     // ── IMAGE / AUDIO / VIDEO / etc. ─────────────────────────────────────────
     else {
       await sendText(from, '😊 Hum sirf text orders process karte hain.\n\nOrder karne ke liye *"Hi"* type karein.');
     }
-
   } catch (err) {
     console.error("❌ Webhook error:", err);
   }
@@ -202,7 +193,6 @@ router.post("/razorpay-webhook", express.raw({ type: "application/json" }), asyn
       const payload       = body.payload.payment_link.entity;
       const paymentLinkId = payload.id;
       const phoneNumber   = payload.notes?.phoneNumber;
-
       await failOrder(paymentLinkId);
       if (phoneNumber) {
         await sendText(
@@ -213,7 +203,6 @@ router.post("/razorpay-webhook", express.raw({ type: "application/json" }), asyn
         console.log(`❌ Order cancelled (expired): ${paymentLinkId}`);
       }
     }
-
     res.sendStatus(200);
   } catch (err) {
     console.error("❌ Razorpay webhook error:", err);
@@ -277,7 +266,6 @@ async function initiatePayment(phoneNumber, session, quantity, address, location
     console.error("❌ initiatePayment failed:");
     console.error("  Message:", err.message);
     console.error("  Razorpay error:", JSON.stringify(err?.error || {}, null, 2));
-
     await resetSession(phoneNumber);
     await sendText(
       phoneNumber,
