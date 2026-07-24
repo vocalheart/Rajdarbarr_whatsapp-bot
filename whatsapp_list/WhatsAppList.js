@@ -1,13 +1,4 @@
-const { getMenu } = require("../services/menuService");
-
 async function getWhatsAppList() {
-  const menu = await getMenu();
-
-  const rows = menu.data.map((item) => ({
-    id: item._id,
-    title: item.name,
-    description: `₹${item.price}`,
-  }));
   return {
     messaging_product: "whatsapp",
     type: "interactive",
@@ -15,21 +6,52 @@ async function getWhatsAppList() {
       type: "list",
       header: {
         type: "text",
-        text: "🍽️ Rajdarbar Restaurant",
+        text: "🙏 Raj Darbar Restaurant",
       },
       body: {
         text:
-          "👋 Hello! How are you?\n\n🍽️ What would you like to order today?",
+          "🍽️ Raj Darbar Restaurant Mein Aapka Swagat Hai!\n\nPlease choose an option 👇",
       },
       footer: {
-        text: "Please select an item from the menu",
+        text: "Serving with Love ❤️",
       },
       action: {
-        button: "View Menu",
+        button: "Select Option",
         sections: [
           {
-            title: "Today's Menu",
-            rows,
+            title: "Restaurant Services",
+            rows: [
+              {
+                id: "menu",
+                title: "🍽️ Menu",
+                description: "Pure Veg & Non Veg",
+              },
+              {
+                id: "location",
+                title: "📍 Location",
+                description: "Open Google Maps",
+              },
+              {
+                id: "delivery",
+                title: "🏠 Home Delivery",
+                description: "Order Online",
+              },
+              {
+                id: "feedback",
+                title: "⭐ Feedback",
+                description: "Share your experience",
+              },
+              {
+                id: "bulk_order",
+                title: "📦 Bulk Order",
+                description: "Contact Diksha",
+              },
+              {
+                id: "catering",
+                title: "🎉 Catering Services",
+                description: "For Parties & Events",
+              },
+            ],
           },
         ],
       },
