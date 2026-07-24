@@ -139,7 +139,7 @@ async function sendBulkOrder(phoneNumber) {
 
 👤 Contact Person: Diksha
 
-📱 800289071`
+📱 09171426666`
   );
 }
 
@@ -157,7 +157,7 @@ House Party
 
 👤 Contact Person: Diksha
 
-📱 800289071`
+📱 09171426666`
   );
 }
 
