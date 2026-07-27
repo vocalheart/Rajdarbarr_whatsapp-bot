@@ -41,16 +41,13 @@ router.post("/webhook", async (req, res) => {
 
   try {
     const value = req.body?.entry?.[0]?.changes?.[0]?.value;
-
     // ── CASE 1: Real customer message ────────────────────────────
     if (value?.messages) {
       const msg  = value.messages[0];
       const from = msg.from;
       const type = msg.type;
-
       console.log("========================================");
       console.log(`📩 NEW MESSAGE from ${from} | type: ${type}`);
-
       if (type === "text") {
         console.log(`💬 Text: "${msg.text.body}"`);
       } else {

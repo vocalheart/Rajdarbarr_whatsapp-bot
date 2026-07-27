@@ -1,6 +1,5 @@
 const router = require("express").Router();
 const axios = require("axios");
-const { getMenu } = require("../services/menuService");
 
 const IG_VERIFY_TOKEN = process.env.IG_VERIFY_TOKEN;
 const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
