@@ -15,6 +15,81 @@ const {
   sendBulkOrder,
   sendCatering,
 } = require("../whatsapp_list/SendtoWhatsApp");
+const Customer = require("./models/Customer");
+const Message  = require("./models/Message");
+
+// ════════════════════════════════════════════════════════════
+//  Helper: Customer ko upsert karo (create ya update)
+// ════════════════════════════════════════════════════════════
+async function upsertCustomer(phone, { lastMessage, incrementUnread } = {}) {
+  const update = {
+    lastSeen: new Date(),
+  };
+  if (lastMessage !== undefined) update.lastMessage = lastMessage;
+
+  const options = { new: true, upsert: true, setDefaultsOnInsert: true };
+
+  const customer = await Customer.findOneAndUpdate(
+    { phone },
+    {
+      $set: update,
+      ...(incrementUnread ? { $inc: { unreadCount: 1 } } : {}),
+    },
+    options
+  );
+  return customer;
+}
+
+// ════════════════════════════════════════════════════════════
+//  Helper: Incoming message ko DB me save karo
+// ════════════════════════════════════════════════════════════
+async function saveIncomingMessage(customer, msg) {
+  const type = msg.type;
+  let text = null;
+  if (type === "text") text = msg.text?.body || null;
+  if (type === "interactive") {
+    text =
+      msg.interactive?.list_reply?.title ||
+      msg.interactive?.button_reply?.title ||
+      null;
+  }
+
+  await Message.create({
+    customer: customer._id,
+    whatsappMessageId: msg.id,
+    direction: "incoming",
+    type,
+    text,
+    status: "received",
+    rawPayload: msg,
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+//  Helper: Outgoing message ko DB me save karo
+//  (agar aapka SendtoWhatsApp.js WhatsApp API ka response
+//   return karta hai to usme se message id mil jayega)
+// ════════════════════════════════════════════════════════════
+async function saveOutgoingMessage(phone, text, waResponse) {
+  try {
+    const customer = await upsertCustomer(phone, { lastMessage: text });
+
+    const whatsappMessageId =
+      waResponse?.messages?.[0]?.id || waResponse?.data?.messages?.[0]?.id || null;
+
+    await Message.create({
+      customer: customer._id,
+      whatsappMessageId,
+      direction: "outgoing",
+      type: "text",
+      text,
+      status: "sent",
+      rawPayload: waResponse || null,
+    });
+  } catch (err) {
+    console.error("⚠️ Outgoing message save failed:", err.message);
+  }
+}
 
 // ════════════════════════════════════════════════════════════
 //  WhatsApp Webhook Verification
@@ -41,11 +116,13 @@ router.post("/webhook", async (req, res) => {
 
   try {
     const value = req.body?.entry?.[0]?.changes?.[0]?.value;
+
     // ── CASE 1: Real customer message ────────────────────────────
     if (value?.messages) {
       const msg  = value.messages[0];
       const from = msg.from;
       const type = msg.type;
+
       console.log("========================================");
       console.log(`📩 NEW MESSAGE from ${from} | type: ${type}`);
       if (type === "text") {
@@ -55,22 +132,42 @@ router.post("/webhook", async (req, res) => {
       }
       console.log("========================================");
 
+      // ── DB me customer + message save karo (sab types ke liye) ──
+      let customer;
+      try {
+        const preview =
+          type === "text"
+            ? msg.text?.body
+            : type === "interactive"
+            ? msg.interactive?.list_reply?.title || msg.interactive?.button_reply?.title
+            : `[${type} message]`;
+
+        customer = await upsertCustomer(from, {
+          lastMessage: preview,
+          incrementUnread: true,
+        });
+        await saveIncomingMessage(customer, msg);
+      } catch (dbErr) {
+        console.error("❌ DB save error (incoming):", dbErr.message);
+      }
+
       // ── yahan se apna existing logic chalao ──
-      const message = msg;
-      const from_ = msg.from;
-      const msgType = msg.type;
+      const message  = msg;
+      const from_    = msg.from;
+      const msgType  = msg.type;
 
       if (msgType === "text") {
         const rawText = message.text?.body?.trim();
         const text = rawText?.toLowerCase();
 
         if (["hi", "hii", "hello", "helo", "hey", "namaste"].includes(text)) {
-          await sendWelcome(from_);
+          const resp = await sendWelcome(from_);
+          await saveOutgoingMessage(from_, "[Welcome message]", resp);
         } else {
-          await sendText(
-            from_,
-            '👋 *Rajdarbar Restaurant*\n\nMenu dekhne ke liye *"Hi"* type karein.'
-          );
+          const replyText =
+            '👋 *Rajdarbar Restaurant*\n\nMenu dekhne ke liye *"Hi"* type karein.';
+          const resp = await sendText(from_, replyText);
+          await saveOutgoingMessage(from_, replyText, resp);
         }
         return;
       }
@@ -79,30 +176,33 @@ router.post("/webhook", async (req, res) => {
         const iType = message.interactive?.type;
         if (iType === "list_reply") {
           const selectedId = message.interactive.list_reply?.id;
+          let resp;
           switch (selectedId) {
-            case "menu": await sendFoodMenu(from_); break;
-            case "veg": await sendVegMenu(from_); break;
-            case "nonveg": await sendNonVegMenu(from_); break;
-            case "location": await sendLocation(from_); break;
-            case "delivery": await sendHomeDelivery(from_); break;
-            case "feedback": await sendFeedback(from_); break;
-            case "bulk_order": await sendBulkOrder(from_); break;
-            case "catering": await sendCatering(from_); break;
-            default: await sendMainMenu(from_);
+            case "menu": resp = await sendFoodMenu(from_); break;
+            case "veg": resp = await sendVegMenu(from_); break;
+            case "nonveg": resp = await sendNonVegMenu(from_); break;
+            case "location": resp = await sendLocation(from_); break;
+            case "delivery": resp = await sendHomeDelivery(from_); break;
+            case "feedback": resp = await sendFeedback(from_); break;
+            case "bulk_order": resp = await sendBulkOrder(from_); break;
+            case "catering": resp = await sendCatering(from_); break;
+            default: resp = await sendMainMenu(from_);
           }
+          await saveOutgoingMessage(from_, `[${selectedId || "main_menu"} reply]`, resp);
           return;
         }
         if (iType === "button_reply") {
-          await sendMainMenu(from_);
+          const resp = await sendMainMenu(from_);
+          await saveOutgoingMessage(from_, "[Main menu]", resp);
           return;
         }
       }
 
       // location/image/audio/video etc
-      await sendText(
-        from_,
-        '😊 Hum sirf text/menu selections process karte hain.\n\nMenu ke liye *"Hi"* type karein.'
-      );
+      const fallbackText =
+        '😊 Hum sirf text/menu selections process karte hain.\n\nMenu ke liye *"Hi"* type karein.';
+      const resp = await sendText(from_, fallbackText);
+      await saveOutgoingMessage(from_, fallbackText, resp);
       return;
     }
 
@@ -110,6 +210,18 @@ router.post("/webhook", async (req, res) => {
     if (value?.statuses) {
       const status = value.statuses[0];
       console.log(`ℹ️  STATUS update — to: ${status.recipient_id}, status: ${status.status}`);
+
+      // ── DB me matching outgoing message ka status update karo ──
+      try {
+        if (status.id) {
+          await Message.findOneAndUpdate(
+            { whatsappMessageId: status.id },
+            { $set: { status: status.status } }
+          );
+        }
+      } catch (dbErr) {
+        console.error("❌ DB save error (status):", dbErr.message);
+      }
       return;
     }
 
@@ -119,6 +231,52 @@ router.post("/webhook", async (req, res) => {
 
   } catch (err) {
     console.error("❌ Webhook error:", err);
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+//  Chat History APIs
+// ════════════════════════════════════════════════════════════
+
+// ── Sab customers ki list, latest chat pehle ──
+router.get("/chats", async (req, res) => {
+  try {
+    const customers = await Customer.find()
+      .sort({ lastSeen: -1 })
+      .lean();
+    res.json({ success: true, count: customers.length, customers });
+  } catch (err) {
+    console.error("❌ /chats error:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Ek specific number ka poora chat history ──
+router.get("/chats/:phone", async (req, res) => {
+  try {
+    const { phone } = req.params;
+
+    const customer = await Customer.findOne({ phone });
+    if (!customer) {
+      return res.status(404).json({ success: false, error: "Customer not found" });
+    }
+
+    const messages = await Message.find({ customer: customer._id })
+      .sort({ createdAt: 1 }) // purana pehle, jaise chat me hota hai
+      .lean();
+
+    // ── Iss number ka unread count reset kar do (chat khol li) ──
+    await Customer.findByIdAndUpdate(customer._id, { $set: { unreadCount: 0 } });
+
+    res.json({
+      success: true,
+      customer,
+      count: messages.length,
+      messages,
+    });
+  } catch (err) {
+    console.error("❌ /chats/:phone error:", err.message);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

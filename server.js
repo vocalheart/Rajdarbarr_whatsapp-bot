@@ -35,17 +35,6 @@ app.use("/api", webhookRoutes);
 // ⭐ INSTAGRAM WEBHOOK ADD
 // app.use("/api/instagram", weebhook);
 
-app.get("/send-menu", async (req, res) => {
-  try {
-    const result = await sendMenu("917566891134");
-    res.json({ success: true, result });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
 
 
 app.get('/privacy-policy', (req, res) => {
