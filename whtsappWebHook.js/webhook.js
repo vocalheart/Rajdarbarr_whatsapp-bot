@@ -37,89 +37,89 @@ router.get("/webhook", (req, res) => {
 //  WhatsApp Webhook — Incoming Messages
 // ════════════════════════════════════════════════════════════
 router.post("/webhook", async (req, res) => {
-  console.log("========== NEW WEBHOOK ==========");
-  console.log(JSON.stringify(req.body, null, 2));
-  res.sendStatus(200);
+  res.sendStatus(200); // WhatsApp ko turant 200 bhejo, warna retry karega
 
   try {
-    const message = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    if (!message) return;
+    const value = req.body?.entry?.[0]?.changes?.[0]?.value;
 
-    const from    = message.from;
-    const msgType = message.type;
-    console.log(`\n📩 From: ${from} | Type: ${msgType}`);
+    // ── CASE 1: Real customer message ────────────────────────────
+    if (value?.messages) {
+      const msg  = value.messages[0];
+      const from = msg.from;
+      const type = msg.type;
 
-    // ── TEXT ─────────────────────────────────────────────────────────────
-    if (msgType === "text") {
-      const rawText = message.text?.body?.trim();
-      const text    = rawText?.toLowerCase();
+      console.log("========================================");
+      console.log(`📩 NEW MESSAGE from ${from} | type: ${type}`);
 
-      // Greetings → Welcome + Main Menu
-      if (["hi", "hii", "hello", "helo", "hey", "namaste"].includes(text)) {
-        await sendWelcome(from);
-        return;
+      if (type === "text") {
+        console.log(`💬 Text: "${msg.text.body}"`);
+      } else {
+        console.log(`📦 Full payload:`, JSON.stringify(msg, null, 2));
       }
+      console.log("========================================");
 
-      // Anything else → nudge back to main menu
-      await sendText(
-        from,
-        '👋 *Rajdarbar Restaurant*\n\nMenu dekhne ke liye *"Hi"* type karein.'
-      );
-      return;
-    }
+      // ── yahan se apna existing logic chalao ──
+      const message = msg;
+      const from_ = msg.from;
+      const msgType = msg.type;
 
-    // ── INTERACTIVE (List / Button) ────────────────────────────────────────
-    if (msgType === "interactive") {
-      const iType = message.interactive?.type;
+      if (msgType === "text") {
+        const rawText = message.text?.body?.trim();
+        const text = rawText?.toLowerCase();
 
-      if (iType === "list_reply") {
-        const selectedId = message.interactive.list_reply?.id;
-
-        switch (selectedId) {
-          case "menu":
-            await sendFoodMenu(from);
-            break;
-          case "veg":
-            await sendVegMenu(from);
-            break;
-          case "nonveg":
-            await sendNonVegMenu(from);
-            break;
-          case "location":
-            await sendLocation(from);
-            break;
-          case "delivery":
-            await sendHomeDelivery(from);
-            break;
-          case "feedback":
-            await sendFeedback(from);
-            break;
-          case "bulk_order":
-            await sendBulkOrder(from);
-            break;
-          case "catering":
-            await sendCatering(from);
-            break;
-          default:
-            await sendMainMenu(from);
+        if (["hi", "hii", "hello", "helo", "hey", "namaste"].includes(text)) {
+          await sendWelcome(from_);
+        } else {
+          await sendText(
+            from_,
+            '👋 *Rajdarbar Restaurant*\n\nMenu dekhne ke liye *"Hi"* type karein.'
+          );
         }
         return;
       }
 
-      if (iType === "button_reply") {
-        // Reserved for future button-based flows (e.g. CTA replies).
-        await sendMainMenu(from);
-        return;
+      if (msgType === "interactive") {
+        const iType = message.interactive?.type;
+        if (iType === "list_reply") {
+          const selectedId = message.interactive.list_reply?.id;
+          switch (selectedId) {
+            case "menu": await sendFoodMenu(from_); break;
+            case "veg": await sendVegMenu(from_); break;
+            case "nonveg": await sendNonVegMenu(from_); break;
+            case "location": await sendLocation(from_); break;
+            case "delivery": await sendHomeDelivery(from_); break;
+            case "feedback": await sendFeedback(from_); break;
+            case "bulk_order": await sendBulkOrder(from_); break;
+            case "catering": await sendCatering(from_); break;
+            default: await sendMainMenu(from_);
+          }
+          return;
+        }
+        if (iType === "button_reply") {
+          await sendMainMenu(from_);
+          return;
+        }
       }
-    }
 
-    // ── LOCATION / IMAGE / AUDIO / VIDEO / etc. ─────────────────────────────
-    else {
+      // location/image/audio/video etc
       await sendText(
-        from,
+        from_,
         '😊 Hum sirf text/menu selections process karte hain.\n\nMenu ke liye *"Hi"* type karein.'
       );
+      return;
     }
+
+    // ── CASE 2: Only a status update (sent/delivered/read) ───────
+    if (value?.statuses) {
+      const status = value.statuses[0];
+      console.log(`ℹ️  STATUS update — to: ${status.recipient_id}, status: ${status.status}`);
+      return;
+    }
+
+    // ── CASE 3: Kuch aur (unexpected payload) ────────────────────
+    console.log("⚠️ Webhook hit but no messages/statuses found. Raw body:");
+    console.log(JSON.stringify(req.body, null, 2));
+
   } catch (err) {
     console.error("❌ Webhook error:", err);
   }
