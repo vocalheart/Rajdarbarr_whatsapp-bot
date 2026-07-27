@@ -156,13 +156,28 @@ router.post("/webhook", async (req, res) => {
       const from_    = msg.from;
       const msgType  = msg.type;
 
+      // WhatsApp template/list messages ka actual body hume nahi milta,
+      // isliye har intent ke liye ek readable label bana diya hai
+      const OUTGOING_LABELS = {
+        welcome: "👋 Welcome message bheja gaya",
+        menu: "📋 Food menu bheja gaya",
+        veg: "🥦 Veg menu bheja gaya",
+        nonveg: "🍗 Non-veg menu bheja gaya",
+        location: "📍 Location bheji gayi",
+        delivery: "🛵 Home delivery info bheji gayi",
+        feedback: "⭐ Feedback form bheja gaya",
+        bulk_order: "📦 Bulk order info bheji gayi",
+        catering: "🍽️ Catering info bheji gayi",
+        main_menu: "📋 Main menu bheja gaya",
+      };
+
       if (msgType === "text") {
         const rawText = message.text?.body?.trim();
         const text = rawText?.toLowerCase();
 
         if (["hi", "hii", "hello", "helo", "hey", "namaste"].includes(text)) {
           const resp = await sendWelcome(from_);
-          await saveOutgoingMessage(from_, "[Welcome message]", resp);
+          await saveOutgoingMessage(from_, OUTGOING_LABELS.welcome, resp);
         } else {
           const replyText =
             '👋 *Rajdarbar Restaurant*\n\nMenu dekhne ke liye *"Hi"* type karein.';
@@ -188,12 +203,16 @@ router.post("/webhook", async (req, res) => {
             case "catering": resp = await sendCatering(from_); break;
             default: resp = await sendMainMenu(from_);
           }
-          await saveOutgoingMessage(from_, `[${selectedId || "main_menu"} reply]`, resp);
+          await saveOutgoingMessage(
+            from_,
+            OUTGOING_LABELS[selectedId] || OUTGOING_LABELS.main_menu,
+            resp
+          );
           return;
         }
         if (iType === "button_reply") {
           const resp = await sendMainMenu(from_);
-          await saveOutgoingMessage(from_, "[Main menu]", resp);
+          await saveOutgoingMessage(from_, OUTGOING_LABELS.main_menu, resp);
           return;
         }
       }
@@ -231,6 +250,42 @@ router.post("/webhook", async (req, res) => {
 
   } catch (err) {
     console.error("❌ Webhook error:", err);
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+//  Send a reply — POST /api/send/:phone   body: { text: "..." }
+// ════════════════════════════════════════════════════════════
+router.post("/send/:phone", async (req, res) => {
+  try {
+    const { phone } = req.params;
+    const text = req.body?.text?.trim();
+
+    if (!text) {
+      return res.status(400).json({ success: false, error: "Message text zaroori hai" });
+    }
+
+    const waResponse = await sendText(phone, text);
+
+    const customer = await upsertCustomer(phone, { lastMessage: text });
+
+    const whatsappMessageId =
+      waResponse?.messages?.[0]?.id || waResponse?.data?.messages?.[0]?.id || null;
+
+    const message = await Message.create({
+      customer: customer._id,
+      whatsappMessageId,
+      direction: "outgoing",
+      type: "text",
+      text,
+      status: "sent",
+      rawPayload: waResponse || null,
+    });
+
+    res.json({ success: true, message, customer });
+  } catch (err) {
+    console.error("❌ /send error:", err.message);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
