@@ -11,7 +11,7 @@ const app = express();
 connectDB();
 
 app.use(cors({
-  origin: ["http://localhost:3000", "http://localhost:3001", "https://api.ednixa.com"],
+  origin: ["http://localhost:3000", "http://localhost:3001", "https://api.ednixa.com", "https://crm-frontend-delta-sandy.vercel.app"],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true,
 }));
