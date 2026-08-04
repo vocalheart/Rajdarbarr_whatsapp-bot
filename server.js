@@ -68,6 +68,14 @@ app.get('/data-deletion', (req, res) => {
   `);
 });
 
+app.get("/callback", (req, res) => {
+  const { code } = req.query;
+
+  console.log("Authorization Code:", code);
+
+  res.send("Instagram login successful");
+});
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
