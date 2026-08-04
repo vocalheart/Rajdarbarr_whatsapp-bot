@@ -41,8 +41,9 @@ async function upsertCustomer(phone, { lastMessage, incrementUnread } = {}) {
 }
 
 // ════════════════════════════════════════════════════════════
-//  Helper: Incoming message ko DB me save karo
+//  Helper: Incoming message ko DB me save karo----------------
 // ════════════════════════════════════════════════════════════
+
 async function saveIncomingMessage(customer, msg) {
   const type = msg.type;
   let text = null;

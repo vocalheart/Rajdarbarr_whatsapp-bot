@@ -3,12 +3,11 @@ const express = require("express");
 const cors = require("cors");
 const connectDB = require("./database/database.js");
 const webhookRoutes = require("./whtsappWebHook.js/webhook");
-// const weebhook = require("./instagramWebHook/weebhook.js");
-
-
+const weebhook = require("./instagramWebHook/weebhook.js");
 
 const app = express();
 connectDB();
+
 
 app.use(cors({
   origin: ["http://localhost:3000", "http://localhost:3001", "https://api.ednixa.com", "https://crm-frontend-delta-sandy.vercel.app"],
@@ -33,7 +32,7 @@ app.get("/", (req, res) => {
 app.use("/api", webhookRoutes);
 
 // ⭐ INSTAGRAM WEBHOOK ADD
-// app.use("/api/instagram", weebhook);
+app.use("/api/instagram", weebhook);
 
 
 
