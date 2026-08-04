@@ -4,10 +4,11 @@ const cors = require("cors");
 const connectDB = require("./database/database.js");
 const webhookRoutes = require("./whtsappWebHook.js/webhook");
 const weebhook = require("./instagramWebHook/weebhook.js");
-
+const router = require("./routes/instagram.js");
 const app = express();
-connectDB();
+const instagramAuth = require("./routes/instagram");
 
+connectDB();
 
 app.use(cors({
   origin: ["http://localhost:3000", "http://localhost:3001", "https://api.ednixa.com", "https://crm-frontend-delta-sandy.vercel.app"],
@@ -18,6 +19,8 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use("/", instagramAuth);
 
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.originalUrl}`);
