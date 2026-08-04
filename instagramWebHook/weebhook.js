@@ -275,9 +275,7 @@ async function handleUserMessage(senderId, msg) {
     await sendInstagramMessage(senderId, menuText);
     return;
   }
-
   const session = await getSession(senderId);
-
   // Select item
   if (session?.step === "SELECT_ITEM") {
     console.log("[STATE] Awaiting item selection");
