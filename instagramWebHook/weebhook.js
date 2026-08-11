@@ -5,7 +5,7 @@ const BotSession = require("../models/BotSession");
 const ProcessedEvent = require("../models/ProcessedEvent");
 const {getInstagramToken} = require("../services/instagramTokenService");
 const IG_VERIFY_TOKEN = process.env.IG_VERIFY_TOKEN;
-const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
+
 // ---------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------
@@ -33,14 +33,16 @@ function formatMenu(menuData) {
   text += "\nReply with item number to order 😊";
   return text;
 }
-
-async function sendInstagramMessage(
-  recipientId,
-  messageText
-) {
+async function sendInstagramMessage(recipientId, messageText) {
   try {
-    const accessToken =
-      await getInstagramToken();
+    // Get valid token from MongoDB
+    // Automatically refreshes if token is near expiry
+    const accessToken = await getInstagramToken();
+
+    console.log(
+      "[IG SEND] Sending message to:",
+      recipientId
+    );
 
     const response = await axios.post(
       "https://graph.instagram.com/v25.0/me/messages",
@@ -61,16 +63,24 @@ async function sendInstagramMessage(
       }
     );
 
-    console.log("[SEND OK]", response.data);
+    console.log(
+      "[SEND OK]",
+      response.data
+    );
 
     return response.data;
+
   } catch (error) {
-    console.log("[SEND ERROR]");
+    console.log(
+      "[SEND ERROR]"
+    );
 
     console.dir(
       error.response?.data ||
         error.message,
-      { depth: null }
+      {
+        depth: null,
+      }
     );
 
     throw error;

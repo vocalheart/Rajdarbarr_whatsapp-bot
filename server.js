@@ -36,9 +36,7 @@ cron.schedule("0 3 * * *", async () => {
       return;
     }
     const sevenDays =7 * 24 * 60 * 60 * 1000;
-    const timeLeft =
-      tokenData.expiresAt.getTime() -
-      Date.now();
+    const timeLeft = tokenData.expiresAt.getTime() - Date.now();
     if (timeLeft <= sevenDays) {
       console.log(
         "[CRON] Token needs refresh"
