@@ -25,6 +25,7 @@
     "express": "^5.2.1",
     "mongodb": "^7.3.0",
     "mongoose": "^9.7.1",
+    "node-cron": "^4.6.0",
     "razorpay": "^2.9.6"
   },
   "devDependencies": {

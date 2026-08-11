@@ -7,7 +7,9 @@ const weebhook = require("./instagramWebHook/weebhook.js");
 const router = require("./routes/instagram.js");
 const app = express();
 const instagramAuth = require("./routes/instagram");
-
+const cron = require("node-cron");
+const {refreshInstagramToken} = require("./services/instagramTokenService");
+const InstagramToken = require("./models/InstagramToken");
 connectDB();
 
 app.use(cors({
@@ -25,6 +27,33 @@ app.use((req, res, next) => {
   next();
 });
 
+cron.schedule("0 3 * * *", async () => {
+  console.log("[CRON] Checking Instagram token...");
+  try {
+    const tokenData = await InstagramToken.findOne().sort({ createdAt: -1});
+    if (!tokenData) {
+      console.log("[CRON] Instagram token not found" );
+      return;
+    }
+    const sevenDays =7 * 24 * 60 * 60 * 1000;
+    const timeLeft =
+      tokenData.expiresAt.getTime() -
+      Date.now();
+    if (timeLeft <= sevenDays) {
+      console.log(
+        "[CRON] Token needs refresh"
+      );
+      await refreshInstagramToken(
+        tokenData
+      );
+    } else {
+      console.log("[CRON] Token is still valid"
+      );
+    }
+  } catch (error) {
+    console.error("[CRON] Instagram token refresh failed");
+  }
+});
 app.get("/", (req, res) => {
   res.send("🍽️ Rajdarbar WhatsApp Bot Running");
 });

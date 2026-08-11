@@ -3,10 +3,9 @@ const axios = require("axios");
 
 const BotSession = require("../models/BotSession");
 const ProcessedEvent = require("../models/ProcessedEvent");
-
+const {getInstagramToken} = require("../services/instagramTokenService");
 const IG_VERIFY_TOKEN = process.env.IG_VERIFY_TOKEN;
 const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN;
-
 // ---------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------
@@ -23,7 +22,7 @@ async function getMenu() {
       { name: "Tandoori Roti", price: 20 }
     ]
   };
-}
+};
 
 function formatMenu(menuData) {
   const items = menuData.data || [];
@@ -35,33 +34,46 @@ function formatMenu(menuData) {
   return text;
 }
 
-async function sendInstagramMessage(recipientId, messageText) {
+async function sendInstagramMessage(
+  recipientId,
+  messageText
+) {
   try {
+    const accessToken =
+      await getInstagramToken();
+
     const response = await axios.post(
       "https://graph.instagram.com/v25.0/me/messages",
       {
         recipient: {
-          id: recipientId
+          id: recipientId,
         },
+
         message: {
-          text: messageText
-        }
+          text: messageText,
+        },
       },
       {
         headers: {
-          Authorization: `Bearer ${IG_ACCESS_TOKEN}`,
-          "Content-Type": "application/json"
-        }
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
       }
     );
 
     console.log("[SEND OK]", response.data);
+
+    return response.data;
   } catch (error) {
     console.log("[SEND ERROR]");
+
     console.dir(
-      error.response?.data || error.message,
+      error.response?.data ||
+        error.message,
       { depth: null }
     );
+
+    throw error;
   }
 }
 
