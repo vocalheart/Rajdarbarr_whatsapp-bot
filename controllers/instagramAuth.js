@@ -42,7 +42,6 @@ router.get("/callback", async (req, res) => {
   } catch (err) {
     console.log("========== TOKEN ERROR ==========");
     console.dir(err.response?.data || err.message, { depth: null });
-
     res.status(500).json(err.response?.data || { message: err.message });
   }
 });

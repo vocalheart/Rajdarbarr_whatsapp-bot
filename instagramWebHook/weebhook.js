@@ -38,20 +38,30 @@ function formatMenu(menuData) {
 async function sendInstagramMessage(recipientId, messageText) {
   try {
     const response = await axios.post(
-      "https://graph.facebook.com/v25.0/me/messages",
+      "https://graph.instagram.com/v25.0/me/messages",
       {
-        recipient: { id: recipientId },
-        message: { text: messageText }
+        recipient: {
+          id: recipientId
+        },
+        message: {
+          text: messageText
+        }
       },
       {
-        params: { access_token: IG_ACCESS_TOKEN },
-        headers: { "Content-Type": "application/json" }
+        headers: {
+          Authorization: `Bearer ${IG_ACCESS_TOKEN}`,
+          "Content-Type": "application/json"
+        }
       }
     );
+
     console.log("[SEND OK]", response.data);
   } catch (error) {
     console.log("[SEND ERROR]");
-    console.dir(error.response?.data || error.message, { depth: null });
+    console.dir(
+      error.response?.data || error.message,
+      { depth: null }
+    );
   }
 }
 
@@ -173,7 +183,6 @@ function extractEvents(body) {
       });
     }
   }
-
   return results;
 }
 
@@ -193,32 +202,25 @@ router.post("/webhook", async (req, res) => {
       console.log("[PARSE] No events found at all — check payload shape above");
       return res.sendStatus(200);
     }
-
     for (const [i, data] of events.entries()) {
       console.log(`--- Event ${i + 1}/${events.length} ---`);
-
       if (data.ignoreReason) {
         console.log(`[IGNORED] Reason: ${data.ignoreReason}`);
         continue;
       }
-
       const { kind, eventId, senderId, message } = data;
-
       if (!senderId || !message) {
         console.log("[SKIPPED] Missing senderId or message text:", data);
         continue;
       }
-
       // Duplicate delivery check
       const dupe = await isDuplicateEvent(eventId, kind === "comment" ? "comment" : "message");
       if (dupe) {
         console.log(`[SKIPPED] Duplicate ${kind} event, id: ${eventId}`);
         continue;
       }
-
       const msg = message.toLowerCase().trim();
       console.log(`[INPUT] Kind: ${kind} | Sender: ${senderId} | Message: ${msg}`);
-
       if (kind === "comment") {
         await handleCommentEvent(senderId, msg);
       } else {

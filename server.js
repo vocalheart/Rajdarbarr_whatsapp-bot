@@ -16,12 +16,10 @@ app.use(cors({
   credentials: true,
 }));
 
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/", instagramAuth);
-
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.originalUrl}`);
   next();
@@ -30,12 +28,17 @@ app.use((req, res, next) => {
 app.get("/", (req, res) => {
   res.send("🍽️ Rajdarbar WhatsApp Bot Running");
 });
-
 app.use("/api", webhookRoutes);
-
 // ⭐ INSTAGRAM WEBHOOK ADD
 app.use("/api/instagram", weebhook);
-
+app.get('/privacy-policy', (req, res) => {
+  res.send(`
+    <h1>Privacy Policy</h1>
+    <p>A1Meals Ordering Bot collects user messages for order processing only.</p>
+    <p>We do not sell or share personal data with third parties.</p>
+    <p>Users may request data deletion by contacting support.</p>
+  `);
+});
 
 
 app.get('/privacy-policy', (req, res) => {
@@ -47,14 +50,6 @@ app.get('/privacy-policy', (req, res) => {
   `);
 });
 
-app.get('/privacy-policy', (req, res) => {
-  res.send(`
-    <h1>Privacy Policy</h1>
-    <p>A1Meals Ordering Bot collects user messages for order processing only.</p>
-    <p>We do not sell or share personal data with third parties.</p>
-    <p>Users may request data deletion by contacting support.</p>
-  `);
-});
 
 app.get('/data-deletion', (req, res) => {
   res.send(`
@@ -71,11 +66,10 @@ app.get('/data-deletion', (req, res) => {
   `);
 });
 
+
 app.get("/callback", (req, res) => {
   const { code } = req.query;
-
   console.log("Authorization Code:", code);
-
   res.send("Instagram login successful");
 });
 
