@@ -350,7 +350,7 @@ router.post("/webhook", async (req, res) => {
 
 // ---------------------------------------------------------
 // COMMENT HANDLER — comment aane par: follower ho to private (comment-id) DM,
-// warna public reply
+// warna public comment reply "Follow karke dm kare"
 // ---------------------------------------------------------
 
 async function handleCommentEvent({
@@ -393,17 +393,7 @@ async function handleCommentEvent({
 
     await sendPrivateCommentReply(
       commentId,
-      `🙏 Thanks for your comment!
-
-💰 Rajdarbar Price List:
-
-1. Paneer Butter Masala — ₹220
-2. Dal Makhani — ₹180
-3. Veg Biryani — ₹200
-4. Butter Naan — ₹40
-5. Tandoori Roti — ₹20
-
-Type MENU for the complete menu.`
+      "Please share your contact details so i can send you our package detail in your WhatsApp"
     );
 
     return;
@@ -417,7 +407,7 @@ Type MENU for the complete menu.`
 
   await replyToInstagramComment(
     commentId,
-    "Thanks! Price ke liye DM karein."
+    "Follow karke dm kare"
   );
 }
 
@@ -425,7 +415,9 @@ Type MENU for the complete menu.`
 // DM / MESSAGE HANDLER — same flow as before, ab MongoDB session ke saath
 // ---------------------------------------------------------
 
-const WELCOME_MESSAGE = `🙏 Welcome to Rajdarbar Restaurant\n\nType:\nMENU → View Menu\nHELP → Customer Support`;
+// "hi", "hello", ya koi bhi unrecognized text/command aane par ye jayega
+const WELCOME_MESSAGE =
+  "Please share your contact details so i can send you our package detail in your WhatsApp";
 
 async function handleUserMessage(senderId, msg) {
   // Menu
@@ -483,7 +475,7 @@ async function handleUserMessage(senderId, msg) {
   }
 
   // Fallback — "hi", "hello", ya koi bhi unrecognized text/command yahan aayega
-  console.log("[STATE] No matching state, sending welcome message");
+  console.log("[STATE] No matching state, sending WhatsApp-contact request message");
   await sendInstagramMessage(senderId, WELCOME_MESSAGE);
 }
 
