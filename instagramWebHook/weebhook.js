@@ -1,7 +1,6 @@
 const router = require("express").Router();
 const axios = require("axios");
 
-const BotSession = require("../models/BotSession");
 const ProcessedEvent = require("../models/ProcessedEvent");
 const {getInstagramToken} = require("../services/instagramTokenService");
 const IG_VERIFY_TOKEN = process.env.IG_VERIFY_TOKEN;
@@ -12,29 +11,6 @@ const {
 // -----------------------HELPERS---------------------------
 // ---------------------------------------------------------
 
-// ⚠️ Abhi ke liye hardcoded menu. Baad me isse apni DB/API se replace kar dena
-// (return shape same rakha hai: { data: [ {name, price}, ... ] }) taaki baaki code na tootey.
-async function getMenu() {
-  return {
-    data: [
-      { name: "Paneer Butter Masala", price: 220 },
-      { name: "Dal Makhani", price: 180 },
-      { name: "Veg Biryani", price: 200 },
-      { name: "Butter Naan", price: 40 },
-      { name: "Tandoori Roti", price: 20 }
-    ]
-  };
-};
-
-function formatMenu(menuData) {
-  const items = menuData.data || [];
-  let text = "🍽️ Rajdarbar Restaurant Menu\n\n";
-  items.forEach((item, index) => {
-    text += `${index + 1}. ${item.name} — ₹${item.price}\n`;
-  });
-  text += "\nReply with item number to order 😊";
-  return text;
-}
 async function sendInstagramMessage(recipientId, messageText) {
   try {
     // Get valid token from MongoDB
@@ -187,26 +163,6 @@ async function sendPrivateCommentReply(
 
     return null;
   }
-}
-
-// ---------------------------------------------------------
-// SESSION HELPERS (MongoDB-backed, replaces old in-memory userOrders)
-// ---------------------------------------------------------
-
-async function getSession(senderId) {
-  return BotSession.findOne({ senderId });
-}
-
-async function setSession(senderId, data) {
-  return BotSession.findOneAndUpdate(
-    { senderId },
-    { ...data, senderId, lastInteractionAt: new Date() },
-    { upsert: true, new: true }
-  );
-}
-
-async function clearSession(senderId) {
-  return BotSession.deleteOne({ senderId });
 }
 
 // ---------------------------------------------------------
@@ -368,7 +324,7 @@ async function handleCommentEvent({
   );
 
   // Only these keywords trigger automation
-  const triggerKeywords = ["price", "menu", "order"];
+  const triggerKeywords = ["price", "order"];
 
   const shouldTrigger = triggerKeywords.some((keyword) =>
     commentText.includes(keyword)
@@ -412,71 +368,16 @@ async function handleCommentEvent({
 }
 
 // ---------------------------------------------------------
-// DM / MESSAGE HANDLER — same flow as before, ab MongoDB session ke saath
+// DM / MESSAGE HANDLER — menu/order flow completely removed.
+// Ab har DM ("hi", "hello", ya kuch bhi) par sirf ye ek hi reply jaata hai.
 // ---------------------------------------------------------
 
-// "hi", "hello", ya koi bhi unrecognized text/command aane par ye jayega
-const WELCOME_MESSAGE =
+const CONTACT_REQUEST_MESSAGE =
   "Please share your contact details so i can send you our package detail in your WhatsApp";
 
 async function handleUserMessage(senderId, msg) {
-  // Menu
-  if (msg === "menu") {
-    console.log("[STATE] Menu requested");
-    const menu = await getMenu();
-    const menuText = formatMenu(menu);
-
-    await setSession(senderId, { step: "SELECT_ITEM", menu: menu.data, item: null });
-
-    await sendInstagramMessage(senderId, menuText);
-    return;
-  }
-  const session = await getSession(senderId);
-  // Select item
-  if (session?.step === "SELECT_ITEM") {
-    console.log("[STATE] Awaiting item selection");
-    const selectedIndex = Number(msg) - 1;
-    const menu = session.menu;
-
-    if (selectedIndex >= 0 && selectedIndex < menu.length) {
-      const item = menu[selectedIndex];
-
-      await setSession(senderId, { step: "SELECT_QTY", item, menu: [] });
-
-      await sendInstagramMessage(
-        senderId,
-        `You selected ${item.name} (₹${item.price})\n\nEnter quantity:`
-      );
-    } else {
-      await sendInstagramMessage(senderId, "Invalid item number.");
-    }
-    return;
-  }
-
-  // Quantity
-  if (session?.step === "SELECT_QTY") {
-    console.log("[STATE] Awaiting quantity");
-    const qty = Number(msg);
-
-    if (!qty || qty <= 0) {
-      await sendInstagramMessage(senderId, "Please enter valid quantity");
-      return;
-    }
-
-    const item = session.item;
-    const total = qty * item.price;
-    await clearSession(senderId);
-
-    await sendInstagramMessage(
-      senderId,
-      `✅ Order Confirmed\n\nItem: ${item.name}\nQty: ${qty}\nTotal: ₹${total}\n\nOur team will contact you soon.`
-    );
-    return;
-  }
-
-  // Fallback — "hi", "hello", ya koi bhi unrecognized text/command yahan aayega
-  console.log("[STATE] No matching state, sending WhatsApp-contact request message");
-  await sendInstagramMessage(senderId, WELCOME_MESSAGE);
+  console.log("[DM] Sending WhatsApp-contact request message to:", senderId);
+  await sendInstagramMessage(senderId, CONTACT_REQUEST_MESSAGE);
 }
 
 module.exports = router;
