@@ -17,7 +17,7 @@ const {
 } = require("../whatsapp_list/SendtoWhatsApp");
 const Customer = require("./models/Customer");
 const Message  = require("./models/Message");
-
+const {checkIfUserFollowsUs} = require("../services/instagramFollowService");
 // ════════════════════════════════════════════════════════════
 //  Helper: Customer ko upsert karo (create ya update)
 // ════════════════════════════════════════════════════════════

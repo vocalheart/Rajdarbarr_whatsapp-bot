@@ -5,9 +5,11 @@ const BotSession = require("../models/BotSession");
 const ProcessedEvent = require("../models/ProcessedEvent");
 const {getInstagramToken} = require("../services/instagramTokenService");
 const IG_VERIFY_TOKEN = process.env.IG_VERIFY_TOKEN;
-
+const {
+  checkIfUserFollowsUs,
+} = require("../services/instagramFollowService");
 // ---------------------------------------------------------
-// HELPERS
+// -----------------------HELPERS---------------------------
 // ---------------------------------------------------------
 
 // ⚠️ Abhi ke liye hardcoded menu. Baad me isse apni DB/API se replace kar dena
@@ -100,6 +102,90 @@ async function isDuplicateEvent(eventId, type) {
     }
     console.log("[DEDUP ERROR]", err.message);
     return false; // DB issue ho to bhi block mat karo, process hone do
+  }
+}
+
+async function replyToInstagramComment(
+  commentId,
+  messageText
+) {
+  try {
+    const accessToken = await getInstagramToken();
+
+    const response = await axios.post(
+      `https://graph.instagram.com/v25.0/${commentId}/replies`,
+      {
+        message: messageText,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log("[COMMENT REPLY OK]",
+      response.data
+    );
+    return response.data;
+  } catch (error) {
+    console.error("[COMMENT REPLY ERROR]");
+    console.dir(error.response?.data ||error.message,{depth: null});
+    return null;
+  }
+}
+
+// Private reply to a comment — uses comment_id as recipient (Meta's recommended
+// mechanism for comment→DM). Lands in the commenter's Inbox if they follow you,
+// or in Requests if they don't. Limited to one private reply per comment within 7 days.
+async function sendPrivateCommentReply(
+  commentId,
+  messageText
+) {
+  try {
+    const accessToken =
+      await getInstagramToken();
+
+    const response = await axios.post(
+      "https://graph.instagram.com/v25.0/me/messages",
+      {
+        recipient: {
+          comment_id: commentId,
+        },
+        message: {
+          text: messageText,
+        },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log(
+      "[PRIVATE COMMENT REPLY OK]",
+      response.data
+    );
+
+    return response.data;
+
+  } catch (error) {
+    console.error(
+      "[PRIVATE COMMENT REPLY ERROR]"
+    );
+
+    console.dir(
+      error.response?.data ||
+        error.message,
+      {
+        depth: null,
+      }
+    );
+
+    return null;
   }
 }
 
@@ -244,7 +330,11 @@ router.post("/webhook", async (req, res) => {
       const msg = message.toLowerCase().trim();
       console.log(`[INPUT] Kind: ${kind} | Sender: ${senderId} | Message: ${msg}`);
       if (kind === "comment") {
-        await handleCommentEvent(senderId, msg);
+        await handleCommentEvent({
+          senderId,
+          commentId: eventId,
+          commentText: msg,
+        });
       } else {
         await handleUserMessage(senderId, msg);
       }
@@ -259,25 +349,75 @@ router.post("/webhook", async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// COMMENT HANDLER — comment aane par DM trigger
+// COMMENT HANDLER — comment aane par: follower ho to private (comment-id) DM,
+// warna public reply
 // ---------------------------------------------------------
 
-async function handleCommentEvent(senderId, commentText) {
-  console.log("[COMMENT] From:", senderId, "| Text:", commentText);
+async function handleCommentEvent({
+  senderId,
+  commentId,
+  commentText,
+}) {
+  console.log(
+    "[COMMENT]",
+    {
+      senderId,
+      commentId,
+      commentText,
+    }
+  );
 
-  // Optional: sirf specific keyword wale comments par hi DM bhejo
-  // (agar har comment par bhejna hai to ye check hata do)
-  const triggerKeywords = ["menu", "order", "price"];
-  const shouldTrigger = triggerKeywords.some((kw) => commentText.includes(kw));
+  // Only these keywords trigger automation
+  const triggerKeywords = ["price", "menu", "order"];
+
+  const shouldTrigger = triggerKeywords.some((keyword) =>
+    commentText.includes(keyword)
+  );
 
   if (!shouldTrigger) {
-    console.log("[COMMENT] No trigger keyword matched, skipping DM");
+    console.log("[COMMENT] No trigger keyword matched");
     return;
   }
 
-  await sendInstagramMessage(
-    senderId,
-    `🙏 Thanks for your comment!\n\nType:\nMENU → View Menu\nHELP → Customer Support`
+  // Check whether commenter follows Rajdarbar
+  const follows = await checkIfUserFollowsUs(senderId);
+
+  console.log("[FOLLOW] User follows:", follows);
+
+  // =====================================
+  // FOLLOWER → PRIVATE REPLY (comment_id based)
+  // =====================================
+
+  if (follows) {
+    console.log("[COMMENT] FOLLOWER → PRIVATE DM");
+
+    await sendPrivateCommentReply(
+      commentId,
+      `🙏 Thanks for your comment!
+
+💰 Rajdarbar Price List:
+
+1. Paneer Butter Masala — ₹220
+2. Dal Makhani — ₹180
+3. Veg Biryani — ₹200
+4. Butter Naan — ₹40
+5. Tandoori Roti — ₹20
+
+Type MENU for the complete menu.`
+    );
+
+    return;
+  }
+
+  // =====================================
+  // NOT VERIFIED FOLLOWER → PUBLIC AUTO REPLY
+  // =====================================
+
+  console.log("[COMMENT] NOT FOLLOWER → PUBLIC REPLY");
+
+  await replyToInstagramComment(
+    commentId,
+    "Thanks! Price ke liye DM karein."
   );
 }
 
