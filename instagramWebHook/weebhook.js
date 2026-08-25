@@ -2,35 +2,66 @@ const router = require("express").Router();
 const axios = require("axios");
 
 const ProcessedEvent = require("../models/ProcessedEvent");
-const {getInstagramToken} = require("../services/instagramTokenService");
+const { getInstagramToken } = require("../services/instagramTokenService");
 const IG_VERIFY_TOKEN = process.env.IG_VERIFY_TOKEN;
+// TODO: apna Instagram business username yaha daal do (Visit profile button ke liye)
+const IG_USERNAME = process.env.IG_USERNAME || "rajdarbar_2022";
 const {
   checkIfUserFollowsUs,
 } = require("../services/instagramFollowService");
+
 // ---------------------------------------------------------
 // -----------------------HELPERS---------------------------
 // ---------------------------------------------------------
 
 async function sendInstagramMessage(recipientId, messageText) {
   try {
-    // Get valid token from MongoDB
-    // Automatically refreshes if token is near expiry
     const accessToken = await getInstagramToken();
-
-    console.log(
-      "[IG SEND] Sending message to:",
-      recipientId
-    );
+    console.log("[IG SEND] Sending message to:", recipientId);
 
     const response = await axios.post(
       "https://graph.instagram.com/v25.0/me/messages",
       {
-        recipient: {
-          id: recipientId,
+        recipient: { id: recipientId },
+        message: { text: messageText },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
         },
+      }
+    );
 
+    console.log("[SEND OK]", response.data);
+    return response.data;
+  } catch (error) {
+    console.log("[SEND ERROR]");
+    console.dir(error.response?.data || error.message, { depth: null });
+    throw error;
+  }
+}
+
+// Naya helper — button template wala message (max 3 buttons Instagram me allowed hain)
+// buttons: [{ type: "postback", title: "...", payload: "..." }, { type: "web_url", title: "...", url: "..." }]
+async function sendButtonMessage(recipientId, text, buttons) {
+  try {
+    const accessToken = await getInstagramToken();
+    console.log("[IG SEND BUTTONS] Sending to:", recipientId, "payload:", buttons.map((b) => b.payload || b.url));
+
+    const response = await axios.post(
+      "https://graph.instagram.com/v25.0/me/messages",
+      {
+        recipient: { id: recipientId },
         message: {
-          text: messageText,
+          attachment: {
+            type: "template",
+            payload: {
+              template_type: "button",
+              text,
+              buttons,
+            },
+          },
         },
       },
       {
@@ -41,58 +72,36 @@ async function sendInstagramMessage(recipientId, messageText) {
       }
     );
 
-    console.log(
-      "[SEND OK]",
-      response.data
-    );
-
+    console.log("[SEND BUTTONS OK]", response.data);
     return response.data;
-
   } catch (error) {
-    console.log(
-      "[SEND ERROR]"
-    );
-
-    console.dir(
-      error.response?.data ||
-        error.message,
-      {
-        depth: null,
-      }
-    );
-
+    console.log("[SEND BUTTONS ERROR]");
+    console.dir(error.response?.data || error.message, { depth: null });
     throw error;
   }
 }
 
 // Duplicate-webhook-delivery check. Returns true if event already processed.
 async function isDuplicateEvent(eventId, type) {
-  if (!eventId) return false; // agar ID hi nahi mili to skip nahi karenge, process hone denge
+  if (!eventId) return false;
   try {
     await ProcessedEvent.create({ eventId, type });
-    return false; // create() succeed hua matlab pehli baar hai
+    return false;
   } catch (err) {
     if (err.code === 11000) {
-      // duplicate key error -> ye event pehle bhi aa chuka hai
       return true;
     }
     console.log("[DEDUP ERROR]", err.message);
-    return false; // DB issue ho to bhi block mat karo, process hone do
+    return false;
   }
 }
 
-async function replyToInstagramComment(
-  commentId,
-  messageText
-) {
+async function replyToInstagramComment(commentId, messageText) {
   try {
     const accessToken = await getInstagramToken();
-
     const response = await axios.post(
       `https://graph.instagram.com/v25.0/${commentId}/replies`,
-      {
-        message: messageText,
-      },
+      { message: messageText },
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -100,38 +109,23 @@ async function replyToInstagramComment(
         },
       }
     );
-
-    console.log("[COMMENT REPLY OK]",
-      response.data
-    );
+    console.log("[COMMENT REPLY OK]", response.data);
     return response.data;
   } catch (error) {
     console.error("[COMMENT REPLY ERROR]");
-    console.dir(error.response?.data ||error.message,{depth: null});
+    console.dir(error.response?.data || error.message, { depth: null });
     return null;
   }
 }
 
-// Private reply to a comment — uses comment_id as recipient (Meta's recommended
-// mechanism for comment→DM). Lands in the commenter's Inbox if they follow you,
-// or in Requests if they don't. Limited to one private reply per comment within 7 days.
-async function sendPrivateCommentReply(
-  commentId,
-  messageText
-) {
+async function sendPrivateCommentReply(commentId, messageText) {
   try {
-    const accessToken =
-      await getInstagramToken();
-
+    const accessToken = await getInstagramToken();
     const response = await axios.post(
       "https://graph.instagram.com/v25.0/me/messages",
       {
-        recipient: {
-          comment_id: commentId,
-        },
-        message: {
-          text: messageText,
-        },
+        recipient: { comment_id: commentId },
+        message: { text: messageText },
       },
       {
         headers: {
@@ -140,27 +134,11 @@ async function sendPrivateCommentReply(
         },
       }
     );
-
-    console.log(
-      "[PRIVATE COMMENT REPLY OK]",
-      response.data
-    );
-
+    console.log("[PRIVATE COMMENT REPLY OK]", response.data);
     return response.data;
-
   } catch (error) {
-    console.error(
-      "[PRIVATE COMMENT REPLY ERROR]"
-    );
-
-    console.dir(
-      error.response?.data ||
-        error.message,
-      {
-        depth: null,
-      }
-    );
-
+    console.error("[PRIVATE COMMENT REPLY ERROR]");
+    console.dir(error.response?.data || error.message, { depth: null });
     return null;
   }
 }
@@ -180,12 +158,11 @@ router.get("/webhook", (req, res) => {
     console.log("[VERIFY] WEBHOOK VERIFIED");
     return res.status(200).send(challenge);
   }
-
   return res.sendStatus(403);
 });
 
 // ---------------------------------------------------------
-// EXTRACT EVENTS — ab comments + messages + WhatsApp-style dono handle karta hai
+// EXTRACT EVENTS — comments + messages + postbacks (button taps) + WhatsApp-style
 // ---------------------------------------------------------
 
 function extractEvents(body) {
@@ -200,26 +177,25 @@ function extractEvents(body) {
         const comment = change.value;
         results.push({
           kind: "comment",
-          eventId: comment?.id, // comment id, dedup ke liye
+          eventId: comment?.id,
           senderId: comment?.from?.id,
-          message: comment?.text
+          message: comment?.text,
         });
         continue;
       }
 
-      // WhatsApp Cloud API style (agar same webhook WhatsApp ke liye bhi use ho raha hai)
       const changeMsg = change?.value?.messages?.[0];
       if (changeMsg) {
         results.push({
           kind: "message",
           eventId: changeMsg.id,
           senderId: changeMsg.from,
-          message: changeMsg.text?.body
+          message: changeMsg.text?.body,
         });
       }
     }
 
-    // --- Instagram/Messenger "messaging" style: DMs ---
+    // --- Instagram/Messenger "messaging" style: DMs + button taps ---
     const messagingArr = entry.messaging || [];
     for (const messaging of messagingArr) {
       if (messaging.read) {
@@ -239,11 +215,22 @@ function extractEvents(body) {
         continue;
       }
 
+      // Button tap (postback) — jab user "Send me the access" ya "I'm following" tap kare
+      if (messaging.postback) {
+        results.push({
+          kind: "postback",
+          eventId: messaging.postback?.mid || `${messaging.sender?.id}-${messaging.timestamp}`,
+          senderId: messaging.sender?.id,
+          payload: messaging.postback?.payload,
+        });
+        continue;
+      }
+
       results.push({
         kind: "message",
         eventId: messaging.message?.mid,
         senderId: messaging.sender?.id,
-        message: messaging.message?.text
+        message: messaging.message?.text,
       });
     }
   }
@@ -266,31 +253,48 @@ router.post("/webhook", async (req, res) => {
       console.log("[PARSE] No events found at all — check payload shape above");
       return res.sendStatus(200);
     }
+
     for (const [i, data] of events.entries()) {
       console.log(`--- Event ${i + 1}/${events.length} ---`);
       if (data.ignoreReason) {
         console.log(`[IGNORED] Reason: ${data.ignoreReason}`);
         continue;
       }
-      const { kind, eventId, senderId, message } = data;
+
+      const { kind, eventId, senderId, message, payload } = data;
+
+      // Postback (button tap) — no message text expected, sirf senderId + payload chahiye
+      if (kind === "postback") {
+        if (!senderId || !payload) {
+          console.log("[SKIPPED] Missing senderId or payload:", data);
+          continue;
+        }
+        const dupe = await isDuplicateEvent(eventId, "postback");
+        if (dupe) {
+          console.log(`[SKIPPED] Duplicate postback event, id: ${eventId}`);
+          continue;
+        }
+        console.log(`[INPUT] Kind: postback | Sender: ${senderId} | Payload: ${payload}`);
+        await handlePostbackEvent(senderId, payload);
+        continue;
+      }
+
       if (!senderId || !message) {
         console.log("[SKIPPED] Missing senderId or message text:", data);
         continue;
       }
-      // Duplicate delivery check
+
       const dupe = await isDuplicateEvent(eventId, kind === "comment" ? "comment" : "message");
       if (dupe) {
         console.log(`[SKIPPED] Duplicate ${kind} event, id: ${eventId}`);
         continue;
       }
+
       const msg = message.toLowerCase().trim();
       console.log(`[INPUT] Kind: ${kind} | Sender: ${senderId} | Message: ${msg}`);
+
       if (kind === "comment") {
-        await handleCommentEvent({
-          senderId,
-          commentId: eventId,
-          commentText: msg,
-        });
+        await handleCommentEvent({ senderId, commentId: eventId, commentText: msg });
       } else {
         await handleUserMessage(senderId, msg);
       }
@@ -305,79 +309,86 @@ router.post("/webhook", async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// COMMENT HANDLER — comment aane par: follower ho to private (comment-id) DM,
-// warna public comment reply "Follow karke dm kare"
+// COMMENT HANDLER — unchanged
 // ---------------------------------------------------------
 
-async function handleCommentEvent({
-  senderId,
-  commentId,
-  commentText,
-}) {
-  console.log(
-    "[COMMENT]",
-    {
-      senderId,
-      commentId,
-      commentText,
-    }
-  );
+async function handleCommentEvent({ senderId, commentId, commentText }) {
+  console.log("[COMMENT]", { senderId, commentId, commentText });
 
-  // Only these keywords trigger automation
   const triggerKeywords = ["price", "order"];
-
-  const shouldTrigger = triggerKeywords.some((keyword) =>
-    commentText.includes(keyword)
-  );
-
+  const shouldTrigger = triggerKeywords.some((keyword) => commentText.includes(keyword));
   if (!shouldTrigger) {
     console.log("[COMMENT] No trigger keyword matched");
     return;
   }
 
-  // Check whether commenter follows Rajdarbar
   const follows = await checkIfUserFollowsUs(senderId);
-
   console.log("[FOLLOW] User follows:", follows);
-
-  // =====================================
-  // FOLLOWER → PRIVATE REPLY (comment_id based)
-  // =====================================
 
   if (follows) {
     console.log("[COMMENT] FOLLOWER → PRIVATE DM");
-
-    await sendPrivateCommentReply(
-      commentId,
-      "Please share your contact details so i can send you our package detail in your WhatsApp"
-    );
-
+    await sendPrivateCommentReply(commentId, CONTACT_REQUEST_MESSAGE);
     return;
   }
 
-  // =====================================
-  // NOT VERIFIED FOLLOWER → PUBLIC AUTO REPLY
-  // =====================================
-
   console.log("[COMMENT] NOT FOLLOWER → PUBLIC REPLY");
-
-  await replyToInstagramComment(
-    commentId,
-    "Follow karke dm kare"
-  );
+  await replyToInstagramComment(commentId, "Follow karke dm kare");
 }
 
 // ---------------------------------------------------------
-// DM / MESSAGE HANDLER — menu/order flow completely removed.
-// Ab har DM ("hi", "hello", ya kuch bhi) par sirf ye ek hi reply jaata hai.
+// MESSAGE TEXT CONSTANTS
 // ---------------------------------------------------------
 
 const CONTACT_REQUEST_MESSAGE =
   "Please share your contact details so i can send you our package detail in your WhatsApp";
 
+const WELCOME_MESSAGE = "Hey there! Glad you're here 😊\n\nTap below and I'll send you the access in just a moment ✨";
+
+const ALMOST_THERE_MESSAGE = "Almost there ! Please visit my profile and tap follow to continue 😁";
+
+// Postback payload constants — inhe button templates me use karte hain
+const PAYLOAD_SEND_ACCESS = "SEND_ACCESS";
+const PAYLOAD_IM_FOLLOWING = "IM_FOLLOWING";
+
+// ---------------------------------------------------------
+// DM / MESSAGE HANDLER — har naye text DM par welcome + "Send me the access" button
+// ---------------------------------------------------------
+
 async function handleUserMessage(senderId, msg) {
-  console.log("[DM] Sending WhatsApp-contact request message to:", senderId);
-  await sendInstagramMessage(senderId, CONTACT_REQUEST_MESSAGE);
+  console.log("[DM] Sending welcome + access button to:", senderId);
+  await sendButtonMessage(senderId, WELCOME_MESSAGE, [
+    { type: "postback", title: "Send me the access", payload: PAYLOAD_SEND_ACCESS },
+  ]);
+}
+
+// ---------------------------------------------------------
+// POSTBACK HANDLER — button taps ("Send me the access" / "I'm following")
+// ---------------------------------------------------------
+
+async function handlePostbackEvent(senderId, payload) {
+  console.log("[POSTBACK]", { senderId, payload });
+
+  if (payload === PAYLOAD_SEND_ACCESS || payload === PAYLOAD_IM_FOLLOWING) {
+    const follows = await checkIfUserFollowsUs(senderId);
+    console.log("[FOLLOW] User follows:", follows);
+
+    if (follows) {
+      // Follow ho chuka hai → seedha main (contact details) message
+      console.log("[POSTBACK] FOLLOWER → CONTACT MESSAGE");
+      await sendInstagramMessage(senderId, CONTACT_REQUEST_MESSAGE);
+      return;
+    }
+
+    // Follow nahi kiya → "Almost there..." message with buttons repeat karo
+    console.log("[POSTBACK] NOT FOLLOWER → ALMOST THERE (repeat)");
+    await sendButtonMessage(senderId, ALMOST_THERE_MESSAGE, [
+      { type: "postback", title: "I'm following", payload: PAYLOAD_IM_FOLLOWING },
+      { type: "web_url", title: "Visit profile", url: `https://instagram.com/${IG_USERNAME}` },
+    ]);
+    return;
+  }
+
+  console.log("[POSTBACK] Unknown payload, ignoring:", payload);
 }
 
 module.exports = router;
