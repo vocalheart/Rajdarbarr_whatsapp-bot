@@ -42,7 +42,7 @@ async function sendInstagramMessage(recipientId, messageText) {
   }
 }
 
-// Naya helper — button template wala message (max 3 buttons Instagram me allowed hain)
+// Button template wala message (max 3 buttons Instagram me allowed hain) — normal DM ke liye (recipient id se)
 // buttons: [{ type: "postback", title: "...", payload: "..." }, { type: "web_url", title: "...", url: "..." }]
 async function sendButtonMessage(recipientId, text, buttons) {
   try {
@@ -118,6 +118,9 @@ async function replyToInstagramComment(commentId, messageText) {
   }
 }
 
+// Private reply to a comment — comment_id ko recipient bana ke DM jaata hai (Meta ka recommended
+// comment→DM mechanism). Follower ke liye seedha Inbox, non-follower ke liye Requests me jaata hai.
+// Sirf ek private reply per comment, 7 din ke andar allowed hai.
 async function sendPrivateCommentReply(commentId, messageText) {
   try {
     const accessToken = await getInstagramToken();
@@ -138,6 +141,41 @@ async function sendPrivateCommentReply(commentId, messageText) {
     return response.data;
   } catch (error) {
     console.error("[PRIVATE COMMENT REPLY ERROR]");
+    console.dir(error.response?.data || error.message, { depth: null });
+    return null;
+  }
+}
+
+// Same as sendPrivateCommentReply, but with buttons — comment se seedha button-DM flow shuru karne ke liye
+async function sendPrivateCommentButtonMessage(commentId, text, buttons) {
+  try {
+    const accessToken = await getInstagramToken();
+    const response = await axios.post(
+      "https://graph.instagram.com/v25.0/me/messages",
+      {
+        recipient: { comment_id: commentId },
+        message: {
+          attachment: {
+            type: "template",
+            payload: {
+              template_type: "button",
+              text,
+              buttons,
+            },
+          },
+        },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    console.log("[PRIVATE COMMENT BUTTON REPLY OK]", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("[PRIVATE COMMENT BUTTON REPLY ERROR]");
     console.dir(error.response?.data || error.message, { depth: null });
     return null;
   }
@@ -309,7 +347,25 @@ router.post("/webhook", async (req, res) => {
 });
 
 // ---------------------------------------------------------
-// COMMENT HANDLER — unchanged
+// MESSAGE TEXT CONSTANTS
+// ---------------------------------------------------------
+
+const CONTACT_REQUEST_MESSAGE =
+  "Please share your contact details so i can send you our package detail in your WhatsApp";
+
+const WELCOME_MESSAGE = "Hey there! Glad you're here 😊\n\nTap below and I'll send you the access in just a moment ✨";
+
+const ALMOST_THERE_MESSAGE = "Almost there ! Please visit my profile and tap follow to continue 😁";
+
+// Postback payload constants — inhe button templates me use karte hain
+const PAYLOAD_SEND_ACCESS = "SEND_ACCESS";
+const PAYLOAD_IM_FOLLOWING = "IM_FOLLOWING";
+
+// ---------------------------------------------------------
+// COMMENT HANDLER — "price"/"order" keyword par trigger
+// Follower → private DM (seedha contact-details message)
+// Non-follower → public reply (follow karne ko bole) + private button-DM (welcome + "Send me the access")
+//                taaki wo bhi DM flow me enter ho jaaye aur follow karne ke baad access le sake
 // ---------------------------------------------------------
 
 async function handleCommentEvent({ senderId, commentId, commentText }) {
@@ -326,29 +382,21 @@ async function handleCommentEvent({ senderId, commentId, commentText }) {
   console.log("[FOLLOW] User follows:", follows);
 
   if (follows) {
-    console.log("[COMMENT] FOLLOWER → PRIVATE DM");
+    console.log("[COMMENT] FOLLOWER → PRIVATE DM (contact details)");
     await sendPrivateCommentReply(commentId, CONTACT_REQUEST_MESSAGE);
     return;
   }
 
-  console.log("[COMMENT] NOT FOLLOWER → PUBLIC REPLY");
+  console.log("[COMMENT] NOT FOLLOWER → PUBLIC REPLY + PRIVATE BUTTON-DM");
+
+  // Public comment reply
   await replyToInstagramComment(commentId, "Follow karke dm kare");
+
+  // Private DM bhi jaayega, welcome + "Send me the access" button ke saath
+  await sendPrivateCommentButtonMessage(commentId, WELCOME_MESSAGE, [
+    { type: "postback", title: "Send me the access", payload: PAYLOAD_SEND_ACCESS },
+  ]);
 }
-
-// ---------------------------------------------------------
-// MESSAGE TEXT CONSTANTS
-// ---------------------------------------------------------
-
-const CONTACT_REQUEST_MESSAGE =
-  "Please share your contact details so i can send you our package detail in your WhatsApp";
-
-const WELCOME_MESSAGE = "Hey there! Glad you're here 😊\n\nTap below and I'll send you the access in just a moment ✨";
-
-const ALMOST_THERE_MESSAGE = "Almost there ! Please visit my profile and tap follow to continue 😁";
-
-// Postback payload constants — inhe button templates me use karte hain
-const PAYLOAD_SEND_ACCESS = "SEND_ACCESS";
-const PAYLOAD_IM_FOLLOWING = "IM_FOLLOWING";
 
 // ---------------------------------------------------------
 // DM / MESSAGE HANDLER — har naye text DM par welcome + "Send me the access" button
@@ -363,6 +411,8 @@ async function handleUserMessage(senderId, msg) {
 
 // ---------------------------------------------------------
 // POSTBACK HANDLER — button taps ("Send me the access" / "I'm following")
+// Follower (already ya recheck pe confirm) → seedha DM me contact-details message
+// Non-follower → "Almost there..." + "I'm following" / "Visit profile" buttons repeat
 // ---------------------------------------------------------
 
 async function handlePostbackEvent(senderId, payload) {
@@ -373,13 +423,11 @@ async function handlePostbackEvent(senderId, payload) {
     console.log("[FOLLOW] User follows:", follows);
 
     if (follows) {
-      // Follow ho chuka hai → seedha main (contact details) message
-      console.log("[POSTBACK] FOLLOWER → CONTACT MESSAGE");
+      console.log("[POSTBACK] FOLLOWER → CONTACT MESSAGE (DM)");
       await sendInstagramMessage(senderId, CONTACT_REQUEST_MESSAGE);
       return;
     }
 
-    // Follow nahi kiya → "Almost there..." message with buttons repeat karo
     console.log("[POSTBACK] NOT FOLLOWER → ALMOST THERE (repeat)");
     await sendButtonMessage(senderId, ALMOST_THERE_MESSAGE, [
       { type: "postback", title: "I'm following", payload: PAYLOAD_IM_FOLLOWING },
